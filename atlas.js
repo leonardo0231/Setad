@@ -1,5 +1,5 @@
 import { connect } from "cloudflare:sockets";
-const DEFAULT_ATLAS_SOURCE_URL = "https://raw.githubusercontent.com/leonardo0231/Setad/refs/heads/main/atlas.js";
+const DEFAULT_ATLAS_SOURCE_URL = "https://raw.githubusercontent.com/leonardo0231/Setad/refs/heads/main/atlas.js?token=GHSAT0AAAAAAEBQ3C4XFYJ4REAXZYHM2DT62SGHCVA";
 const DEFAULT_ATLAS_IPS_URL = "https://raw.githubusercontent.com/IR-NETLIFY/zeus/refs/heads/main/ips.txt";
 const GLOBAL_TRAFFIC_CACHE = new Map();
 const ACTIVE_CONNECTIONS_COUNT = new Map();
