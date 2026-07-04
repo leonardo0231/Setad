@@ -1,15 +1,3 @@
-
-<table width="100%">
-  <tr>
-    <td width="50%" valign="middle" align="center"><img src="photos/atlas-updater.png" width="100%" alt="Atlas Updater" style="border-radius: 12px;"></td>
-    <td width="50%" valign="middle" align="center"><img src="photos/atlas-deployer.png" width="100%" alt="Atlas Deployer" style="border-radius: 12px;"></td>
-  </tr>
-  <tr>
-    <td width="50%" valign="middle" align="center"><img src="photos/atlas-add.png" width="100%" alt="Atlas Add User" style="border-radius: 12px;"></td>
-    <td width="50%" valign="middle" align="center"><img src="photos/atlas-status.png" width="100%" alt="Atlas Status" style="border-radius: 12px;"></td>
-  </tr>
-</table>
-
 <div align="center">
   <h1>⚡ Atlas for Cloudflare Workers</h1>
   <p>
