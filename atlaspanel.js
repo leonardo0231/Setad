@@ -10,17 +10,17 @@ let GLOBAL_REQ_COUNT = 0;
 let GLOBAL_LAST_REQ_WRITE = 0;
 const DNS_CACHE_TTL = 5 * 60 * 1000;
 const DOH_RESOLVER = "https://cloudflare-dns.com/dns-query";
-const DLBPANEL_IPS_SOURCE_URL = "https://github.com/IR-NETLIFY/zeus/blob/main/ips.txt";
+const ATLAS_IPS_SOURCE_URL = "https://github.com/IR-NETLIFY/zeus/blob/main/ips.txt";
 
-function getDlbPanelIpsRawSourceUrl() {
+function getAtlasIpsRawSourceUrl() {
 	// The panel is pinned to the GitHub blob URL requested by the owner,
 	// but Workers must fetch the raw file, not GitHub's HTML viewer page.
-	return DLBPANEL_IPS_SOURCE_URL
+	return ATLAS_IPS_SOURCE_URL
 		.replace("https://github.com/", "https://raw.githubusercontent.com/")
 		.replace("/blob/", "/");
 }
 
-function isDlbPanelHtmlResponse(text, contentType = "") {
+function isAtlasHtmlResponse(text, contentType = "") {
 	return /text\/html/i.test(String(contentType || "")) || /<(?:!doctype|html|head|body|script|style|div|link|meta|button|p)\b/i.test(String(text || ""));
 }
 const UPSTREAM_BUNDLE_TARGET_BYTES = 16 * 1024;
@@ -61,7 +61,7 @@ export default {
 	},
 };
 
-function isDlbPanelSafeAddress(value, options = {}) {
+function isAtlasSafeAddress(value, options = {}) {
 	const allowHost = options.allowHost !== false;
 	const line = String(value || "").trim();
 	if (!line || line.length > 253) return false;
@@ -78,7 +78,7 @@ function isDlbPanelSafeAddress(value, options = {}) {
 	return hostLabels.length > 1 && hostLabels.every((label) => /^[A-Za-z0-9-]{1,63}$/.test(label) && label[0] !== "-" && label[label.length - 1] !== "-");
 }
 
-function getDlbPanelCleanAddresses(rawText, options = {}) {
+function getAtlasCleanAddresses(rawText, options = {}) {
 	const seen = new Set();
 	const output = [];
 	String(rawText || "")
@@ -86,7 +86,7 @@ function getDlbPanelCleanAddresses(rawText, options = {}) {
 		.split(/[\n,;]+/)
 		.map((line) => line.trim())
 		.forEach((line) => {
-			if (!isDlbPanelSafeAddress(line, options)) return;
+			if (!isAtlasSafeAddress(line, options)) return;
 			const key = line.toLowerCase();
 			if (seen.has(key)) return;
 			seen.add(key);
@@ -95,18 +95,18 @@ function getDlbPanelCleanAddresses(rawText, options = {}) {
 	return output;
 }
 
-function serializeDlbPanelCleanIps(rawText) {
-	const ips = getDlbPanelCleanAddresses(rawText, { allowHost: true });
+function serializeAtlasCleanIps(rawText) {
+	const ips = getAtlasCleanAddresses(rawText, { allowHost: true });
 	return ips.length ? ips.join("\n") : null;
 }
 
-function getDlbPanelOutboundIps(rawText, fallbackHost) {
-	const ips = getDlbPanelCleanAddresses(rawText, { allowHost: true });
+function getAtlasOutboundIps(rawText, fallbackHost) {
+	const ips = getAtlasCleanAddresses(rawText, { allowHost: true });
 	if (ips.length > 0) return ips;
-	return isDlbPanelSafeAddress(fallbackHost, { allowHost: true }) ? [fallbackHost] : [];
+	return isAtlasSafeAddress(fallbackHost, { allowHost: true }) ? [fallbackHost] : [];
 }
 
-function sanitizeDlbPanelIps(rawText) {
+function sanitizeAtlasIps(rawText) {
 	const cleaned = [];
 	for (const rawLine of String(rawText || "").replace(/\r/g, "").split("\n")) {
 		const line = rawLine.trim();
@@ -116,17 +116,17 @@ function sanitizeDlbPanelIps(rawText) {
 			continue;
 		}
 		if (line.startsWith("[source")) continue;
-		if (isDlbPanelSafeAddress(line, { allowHost: true })) cleaned.push(line);
+		if (isAtlasSafeAddress(line, { allowHost: true })) cleaned.push(line);
 	}
 	return cleaned.join("\n");
 }
 
-async function cleanStoredDlbPanelIps(db) {
+async function cleanStoredAtlasIps(db) {
 	try {
 		const { results } = await db.prepare("SELECT id, ips FROM users WHERE ips IS NOT NULL AND ips != ''").all();
 		for (const row of results || []) {
 			const original = String(row.ips || "");
-			const cleaned = serializeDlbPanelCleanIps(original);
+			const cleaned = serializeAtlasCleanIps(original);
 			if ((cleaned || "") !== original) {
 				await db.prepare("UPDATE users SET ips = ? WHERE id = ?").bind(cleaned, row.id).run();
 			}
@@ -218,7 +218,7 @@ const Router = {
 				created_at: user.created_at,
 				tls: user.tls,
 				port: user.port,
-				ips: serializeDlbPanelCleanIps(user.ips),
+				ips: serializeAtlasCleanIps(user.ips),
 				fingerprint: user.fingerprint || "chrome",
 			});
 			const html = HTML_TEMPLATES.status.replace("/* {{USER_DATA_PLACEHOLDER}} */", `window.statusUser = ${userJson};`);
@@ -360,8 +360,8 @@ const Router = {
 		}
 		if (url.pathname === "/api/clean-ips" && request.method === "GET") {
 			try {
-				const ipsSourceUrl = DLBPANEL_IPS_SOURCE_URL;
-				const ipsFetchUrl = getDlbPanelIpsRawSourceUrl() + "?t=" + Date.now();
+				const ipsSourceUrl = ATLAS_IPS_SOURCE_URL;
+				const ipsFetchUrl = getAtlasIpsRawSourceUrl() + "?t=" + Date.now();
 				const ipsResponse = await fetch(ipsFetchUrl, {
 					headers: {
 						"Accept": "text/plain,*/*",
@@ -372,10 +372,10 @@ const Router = {
 				});
 				if (!ipsResponse.ok) throw new Error("Failed to fetch IP list from the pinned source");
 				const rawText = await ipsResponse.text();
-				if (isDlbPanelHtmlResponse(rawText, ipsResponse.headers.get("Content-Type"))) {
+				if (isAtlasHtmlResponse(rawText, ipsResponse.headers.get("Content-Type"))) {
 					throw new Error("The pinned IP source returned HTML instead of ips.txt");
 				}
-				const cleanText = sanitizeDlbPanelIps(rawText);
+				const cleanText = sanitizeAtlasIps(rawText);
 				const ipLikeCount = cleanText.split("\n").filter((line) => line && !line.startsWith("#") && !line.startsWith("----------")).length;
 				if (ipLikeCount === 0) throw new Error("Fetched file did not contain valid IP/host entries");
 				return new Response(cleanText, {
@@ -383,7 +383,7 @@ const Router = {
 						"Content-Type": "text/plain; charset=utf-8",
 						"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
 						"X-Content-Type-Options": "nosniff",
-						"X-DLBPanel-IP-Source": ipsSourceUrl,
+						"X-Atlas-IP-Source": ipsSourceUrl,
 					},
 				});
 			} catch (err) {
@@ -395,7 +395,7 @@ const Router = {
 		}
 		if (url.pathname === "/api/clean-stored-ips" && request.method === "POST") {
 			try {
-				await cleanStoredDlbPanelIps(env.DB);
+				await cleanStoredAtlasIps(env.DB);
 				return new Response(JSON.stringify({ success: true }), {
 					headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
 				});
@@ -425,7 +425,7 @@ const Router = {
 					currentAccountId = accData.result[0].id;
 				}
 
-				const githubRes = await fetch("https://raw.githubusercontent.com/Alidl81/DLB-Panel/refs/heads/main/dlbpanel.js?t=" + Date.now() + Math.random(), {
+				const githubRes = await fetch("https://raw.githubusercontent.com/leonardo0231/Setad/refs/heads/main/atlaspanel.js?t=" + Date.now() + Math.random(), {
 					headers: {
 						"Cache-Control": "no-cache, no-store, must-revalidate",
 						Pragma: "no-cache",
@@ -461,14 +461,14 @@ const Router = {
 				}
 
 				const metadata = {
-					main_module: "dlbpanel.js",
+					main_module: "atlaspanel.js",
 					compatibility_date: "2024-02-08",
 					bindings: newBindings,
 				};
 
 				const formData = new FormData();
 				formData.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
-				formData.append("dlbpanel.js", new Blob([newCode], { type: "application/javascript+module" }), "dlbpanel.js");
+				formData.append("atlaspanel.js", new Blob([newCode], { type: "application/javascript+module" }), "atlaspanel.js");
 
 				const deployRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${currentAccountId}/workers/scripts/${scriptName}`, {
 					method: "PUT",
@@ -480,7 +480,7 @@ const Router = {
 
 				return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
 			} catch (err) {
-				const errorMsg = err.message + " | در صورت عدم موفقیت، از طریق لینک زیر آپدیت کنید: https://github.com/Alidl81/DLB-Panel";
+				const errorMsg = err.message + " | در صورت عدم موفقیت، از طریق لینک زیر آپدیت کنید: https://github.com/leonardo0231/Setad";
 				return new Response(JSON.stringify({ error: errorMsg }), { status: 500, headers: { "Content-Type": "application/json" } });
 			}
 		}
@@ -493,7 +493,7 @@ const Router = {
 			}
 
 			try {
-				const githubRes = await fetch("https://raw.githubusercontent.com/Alidl81/DLB-Panel/refs/heads/main/dlbpanel.js?t=" + Date.now(), {
+				const githubRes = await fetch("https://raw.githubusercontent.com/leonardo0231/Setad/refs/heads/main/atlaspanel.js?t=" + Date.now(), {
 					headers: {
 						"Cache-Control": "no-cache, no-store, must-revalidate",
 						Pragma: "no-cache",
@@ -521,14 +521,14 @@ const Router = {
 				newBindings.push({ type: "secret_text", name: "CF_ACCOUNT_ID", text: currentAccountId });
 
 				const metadata = {
-					main_module: "dlbpanel.js",
+					main_module: "atlaspanel.js",
 					compatibility_date: "2024-02-08",
 					bindings: newBindings,
 				};
 
 				const formData = new FormData();
 				formData.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
-				formData.append("dlbpanel.js", new Blob([newCode], { type: "application/javascript+module" }), "dlbpanel.js");
+				formData.append("atlaspanel.js", new Blob([newCode], { type: "application/javascript+module" }), "atlaspanel.js");
 
 				const deployRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${currentAccountId}/workers/scripts/${scriptName}`, {
 					method: "PUT",
@@ -635,7 +635,7 @@ const Router = {
 						return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
 					} else {
 						const { username: new_username, limit_gb, expiry_days, limit_req, ips, tls, port, fingerprint, ip_limit } = body;
-					const safeIps = serializeDlbPanelCleanIps(ips);
+					const safeIps = serializeAtlasCleanIps(ips);
 						if (new_username && new_username !== username) {
 							const existing = await env.DB.prepare("SELECT id FROM users WHERE username = ?").bind(new_username).first();
 							if (existing) {
@@ -677,7 +677,7 @@ const Router = {
 					const now = Date.now();
 					const enrichedUsers = (results || []).map((user) => ({
 						...user,
-						ips: serializeDlbPanelCleanIps(user.ips),
+						ips: serializeAtlasCleanIps(user.ips),
 						is_online: user.last_active && now - user.last_active < 25000 ? 1 : 0,
 						online_count: getActiveIpCount(user.active_ips),
 					}));
@@ -722,7 +722,7 @@ const Router = {
 				}
 				if (request.method === "POST") {
 					const { username, uuid, limit_gb, expiry_days, limit_req, ips, tls, port, fingerprint, ip_limit, used_gb, used_req, created_at, is_active } = await request.json();
-					const safeIps = serializeDlbPanelCleanIps(ips);
+					const safeIps = serializeAtlasCleanIps(ips);
 					if (!username) {
 						return new Response(JSON.stringify({ error: "نام کاربری اجباری است" }), { status: 400, headers: { "Content-Type": "application/json" } });
 					}
@@ -806,7 +806,7 @@ const DbService = {
 		try {
 			await db.prepare("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)").run();
 		} catch (e) {}
-		await cleanStoredDlbPanelIps(db);
+		await cleanStoredAtlasIps(db);
 		schemaEnsured = true;
 	},
 	async getPanelPassword(db) {
@@ -858,15 +858,15 @@ function getActiveIpCount(activeIpsJson) {
 }
 const SubscriptionService = {
 	async generateText(user, host) {
-		const ips = getDlbPanelOutboundIps(user.ips, host);
+		const ips = getAtlasOutboundIps(user.ips, host);
 		const ports = String(user.port || "443")
 			.split(",")
 			.map((p) => p.trim())
 			.filter((p) => p.length > 0);
 		const fp = user.fingerprint || "chrome";
 		const links = [];
-		const brandRemark = "خرید با کمترین قیمت از @Ali_dlb404 در تلگرام";
-		links.push(atob("dmxlc3M6Ly8=") + user.uuid + "@0.0.0.0:1?encryption=none&security=none&type=ws&host=" + host + "&path=%2Fdlbpanel#" + encodeURIComponent(brandRemark));
+		const brandRemark = "Atlas";
+		links.push(atob("dmxlc3M6Ly8=") + user.uuid + "@0.0.0.0:1?encryption=none&security=none&type=ws&host=" + host + "&path=%2Fatlas#" + encodeURIComponent(brandRemark));
 		let remVol = "Unlimited";
 		if (user.limit_gb) {
 			let rem = user.limit_gb - (user.used_gb || 0);
@@ -2226,7 +2226,7 @@ login: `<!DOCTYPE html>
             
             <div class="mb-5 p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800/50 rounded-xl text-xs leading-relaxed text-orange-800 dark:text-orange-300">
                 برای احراز هویت و اثبات مالکیت پنل، از طریق دکمه زیر وارد کلودفلر شوید و توکن دریافتی را کپی کرده و در کادر زیر وارد کنید.
-                <a href="https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_kv_storage%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22d1%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22account_settings%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22workers_subdomain%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22account_analytics%22%2C%22type%22%3A%22read%22%7D%5D&accountId=*&zoneId=all&name=DLBPanel-Deployer-Token" target="_blank" class="mt-3 w-full flex items-center justify-center gap-2 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-bold transition shadow-md shadow-orange-500/20">
+                <a href="https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_kv_storage%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22d1%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22account_settings%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22workers_subdomain%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22account_analytics%22%2C%22type%22%3A%22read%22%7D%5D&accountId=*&zoneId=all&name=Atlas-Deployer-Token" target="_blank" class="mt-3 w-full flex items-center justify-center gap-2 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-bold transition shadow-md shadow-orange-500/20">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
                     دریافت توکن
                 </a>
@@ -2305,7 +2305,7 @@ login: `<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DLB Panel</title>
+    <title>Atlas</title>
     <script>
         const originalWarn = console.warn;
         console.warn = (...args) => {
@@ -2371,16 +2371,16 @@ login: `<!DOCTYPE html>
         <div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
             <div class="flex flex-row flex-wrap justify-center items-center gap-3 w-full md:w-auto">
                 <h1 class="text-lg font-bold flex items-center gap-2" dir="ltr">
-                    DLB Panel 
+                    Atlas
                     <span id="panel-version" class="text-xs px-2 py-0.5 font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 rounded-full">v1.5.15-compat</span>
                 </h1>
                 <div class="flex items-center gap-3 bg-gray-100 dark:bg-zinc-800/60 px-3 py-1.5 rounded-full border border-gray-200 dark:border-zinc-800/80 shadow-sm flex-shrink-0 w-fit">
-                    <a href="https://github.com/Alidl81/DLB-Panel" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 transition-all transform hover:scale-125 duration-200 flex-shrink-0" title="GitHub">
+                    <a href="https://github.com/leonardo0231/Setad" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 transition-all transform hover:scale-125 duration-200 flex-shrink-0" title="GitHub">
                         <svg class="w-[22px] h-[22px] flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
                         </svg>
                     </a>
-                    <a href="https://github.com/Alidl81/DLB-Panel" target="_blank" rel="noopener noreferrer" class="text-sky-500 hover:text-sky-600 dark:hover:text-sky-400 transition-all transform hover:scale-125 duration-200 flex-shrink-0" title="Telegram">
+                    <a href="https://github.com/leonardo0231/Setad" target="_blank" rel="noopener noreferrer" class="text-sky-500 hover:text-sky-600 dark:hover:text-sky-400 transition-all transform hover:scale-125 duration-200 flex-shrink-0" title="Telegram">
                         <svg class="w-[22px] h-[22px] flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.94-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.37.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .24z"/>
                         </svg>
@@ -2871,7 +2871,7 @@ login: `<!DOCTYPE html>
                         <span class="bg-white dark:bg-amoled-card px-2 text-gray-400">یا</span>
                     </div>
                 </div>
-                <a href="https://github.com/Alidl81/DLB-Panel" target="_blank" class="w-full py-3.5 bg-orange-500 hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-500 text-white font-bold rounded-xl text-sm transition duration-300 flex items-center justify-center gap-2 border border-orange-400 dark:border-orange-500 shadow-sm">
+                <a href="https://github.com/leonardo0231/Setad" target="_blank" class="w-full py-3.5 bg-orange-500 hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-500 text-white font-bold rounded-xl text-sm transition duration-300 flex items-center justify-center gap-2 border border-orange-400 dark:border-orange-500 shadow-sm">
                     <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
                     </svg>
@@ -2900,7 +2900,7 @@ login: `<!DOCTYPE html>
                 توکن کلودفلر شما در این پنل ذخیره نشده است. برای فعال‌سازی آپدیت خودکار از داخل پنل، لطفاً توکن خود را دریافت کرده و در کادر زیر وارد کنید.
             </div>
 
-            <a href="https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_kv_storage%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22d1%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22account_settings%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22workers_subdomain%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22account_analytics%22%2C%22type%22%3A%22read%22%7D%5D&accountId=*&zoneId=all&name=DLBPanel-Deployer-Token" target="_blank" class="flex items-center justify-center gap-2 w-full py-3 bg-[#d94800] hover:bg-[#e35802] text-white font-bold rounded-xl text-sm transition duration-300 mb-4 shadow-md shadow-orange-500/20">
+            <a href="https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_kv_storage%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22d1%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22account_settings%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22workers_subdomain%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22account_analytics%22%2C%22type%22%3A%22read%22%7D%5D&accountId=*&zoneId=all&name=Atlas-Deployer-Token" target="_blank" class="flex items-center justify-center gap-2 w-full py-3 bg-[#d94800] hover:bg-[#e35802] text-white font-bold rounded-xl text-sm transition duration-300 mb-4 shadow-md shadow-orange-500/20">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
                 دریافت توکن کلودفلر
             </a>
@@ -3506,7 +3506,7 @@ login: `<!DOCTYPE html>
                         warningBtn.classList.remove('hidden');
                     }
                     const today = new Date().toISOString().split('T')[0];
-                    if (localStorage.getItem('dlbpanel_usage_warned_date') !== today) {
+                    if (localStorage.getItem('atlas_usage_warned_date') !== today) {
                         openUsageWarning();
                     }
                 } else {
@@ -3872,7 +3872,7 @@ async function resetUserData(encodedUsername, actionType) {
             }
             const port = checkedPorts.join(',');
             const tls = checkedPorts.some(p => tlsPorts.includes(p)) ? 'on' : 'off';
-            const ips = cleanDlbPanelTextareaIps(document.getElementById('input-ips').value);
+            const ips = cleanAtlasTextareaIps(document.getElementById('input-ips').value);
             const fingerprint = document.getElementById('fingerprint-select').value;
             const url = isEditMode ? '/api/users/' + encodeURIComponent(editingUsername) : '/api/users';
             const method = isEditMode ? 'PUT' : 'POST';
@@ -3906,7 +3906,7 @@ function closePathWarning() {
         card.classList.remove('opacity-100', 'scale-100');
         card.classList.add('opacity-0', 'scale-95');
     }
-    localStorage.setItem('dlbpanel_path_warned_' + CURRENT_VERSION, 'true');
+    localStorage.setItem('atlas_path_warned_' + CURRENT_VERSION, 'true');
 }
 function closeUsageWarning() {
     const modal = document.getElementById('usage-warning-modal');
@@ -3919,7 +3919,7 @@ function closeUsageWarning() {
         card.classList.add('opacity-0', 'scale-95');
     }
     const today = new Date().toISOString().split('T')[0];
-    localStorage.setItem('dlbpanel_usage_warned_date', today);
+    localStorage.setItem('atlas_usage_warned_date', today);
 }
 function openUsageWarning() {
     // Popup disabled intentionally; keep UI clean and non-blocking.
@@ -3931,14 +3931,14 @@ function openUsageWarning() {
             const host = window.location.hostname;
             let ips = [host];
             if (user.ips) {
-                const parsedIps = user.ips.split('\\n').map(ip => ip.trim()).filter(isDlbPanelValidIpLine);
+                const parsedIps = user.ips.split('\\n').map(ip => ip.trim()).filter(isAtlasValidIpLine);
                 if (parsedIps.length > 0) ips = parsedIps;
             }
             const ports = String(user.port || '443').split(',').map(p => p.trim()).filter(p => p.length > 0);
             const fp = user.fingerprint || 'chrome';
             const links = [];
-            const brandRemark = 'خرید با کمترین قیمت از @Ali_dlb404 در تلگرام';
-            links.push('vle' + 'ss://' + (user.uuid || '') + '@0.0.0.0:1?encryption=none&security=none&type=ws&host=' + host + '&path=%2Fdlbpanel#' + encodeURIComponent(brandRemark));
+            const brandRemark = 'Atlas';
+            links.push('vle' + 'ss://' + (user.uuid || '') + '@0.0.0.0:1?encryption=none&security=none&type=ws&host=' + host + '&path=%2Fatlas#' + encodeURIComponent(brandRemark));
             ips.forEach((ip, ipIndex) => {
                 ports.forEach((portStr) => {
                     const isTlsPort = tlsPorts.includes(portStr);
@@ -4030,7 +4030,7 @@ function editUser(encodedUsername) {
     document.getElementById('input-expiry').value = user.expiry_days || '';
     document.getElementById('input-req-limit').value = user.limit_req || '';
     document.getElementById('input-ip-limit').value = user.ip_limit !== undefined ? (user.ip_limit || '') : (user.max_connections || '');
-    document.getElementById('input-ips').value = cleanDlbPanelTextareaIps(user.ips || '');
+    document.getElementById('input-ips').value = cleanAtlasTextareaIps(user.ips || '');
     document.getElementById('fingerprint-select').value = user.fingerprint || 'chrome';
     const userPorts = String(user.port || '').split(',').map(p => p.trim());
     document.querySelectorAll('input[name="ports"]').forEach(cb => {
@@ -4173,7 +4173,7 @@ function editUser(encodedUsername) {
             const downloadAnchor = document.createElement('a');
             const dateStr = new Date().toISOString().split('T')[0];
             downloadAnchor.setAttribute("href", dataStr);
-            downloadAnchor.setAttribute("download", "dlbpanel_users_backup_" + dateStr + ".json");
+            downloadAnchor.setAttribute("download", "atlas_users_backup_" + dateStr + ".json");
             document.body.appendChild(downloadAnchor);
             downloadAnchor.click();
             downloadAnchor.remove();
@@ -4340,7 +4340,7 @@ const UPDATE_FIX = "constsCURRENT_VERSION='d.d.d'";
                 if (isManual) {
                     document.getElementById('update-toggle').classList.add('animate-pulse');
                 }
-                const res = await fetch('https://raw.githubusercontent.com/Alidl81/DLB-Panel/refs/heads/main/dlbpanel.js?t=' + Date.now());
+                const res = await fetch('https://raw.githubusercontent.com/leonardo0231/Setad/refs/heads/main/atlaspanel.js?t=' + Date.now());
                 if (!res.ok) throw new Error('Network response was not ok');
                 const text = await res.text();
                 const match = text.match(/const\\s+CURRENT_VERSION\\s*=\\s*['"](\\d+\\.\\d+\\.\\d+)['"]/i);
@@ -4428,19 +4428,19 @@ const UPDATE_FIX = "constsCURRENT_VERSION='d.d.d'";
             }
         }
 let cachedIpsData = {};
-const DLBPANEL_IPS_GITHUB_BLOB_URL = 'https://github.com/IR-NETLIFY/zeus/blob/main/ips.txt';
-const DLBPANEL_IPS_GITHUB_RAW_URL = 'https://raw.githubusercontent.com/IR-NETLIFY/zeus/main/ips.txt';
-const DLBPANEL_LF = String.fromCharCode(10);
-const DLBPANEL_CR = String.fromCharCode(13);
-const DLBPANEL_BS = String.fromCharCode(92);
+const ATLAS_IPS_GITHUB_BLOB_URL = 'https://github.com/IR-NETLIFY/zeus/blob/main/ips.txt';
+const ATLAS_IPS_GITHUB_RAW_URL = 'https://raw.githubusercontent.com/IR-NETLIFY/zeus/main/ips.txt';
+const ATLAS_LF = String.fromCharCode(10);
+const ATLAS_CR = String.fromCharCode(13);
+const ATLAS_BS = String.fromCharCode(92);
 
-function isDlbPanelHtmlText(text) {
+function isAtlasHtmlText(text) {
     const s = String(text || '').toLowerCase();
     const needles = ['<!doctype', '<html', '<head', '<body', '<script', '<style', '<link', '<meta', '<div', '<p', '<button', '<span', '<svg', 'برای ورود به پنل', 'ورود به پنل', 'tailwind.config', 'fontfamily', 'darkmode', 'theme:', 'extend:', 'vazirmatn'];
     return needles.some(function(n) { return s.indexOf(n.toLowerCase()) !== -1; });
 }
 
-function dlbPanelOnlyDigits(value) {
+function atlasOnlyDigits(value) {
     if (!value) return false;
     for (let i = 0; i < value.length; i++) {
         const code = value.charCodeAt(i);
@@ -4449,18 +4449,18 @@ function dlbPanelOnlyDigits(value) {
     return true;
 }
 
-function dlbPanelIsIpv4(line) {
+function atlasIsIpv4(line) {
     const parts = line.split('.');
     if (parts.length !== 4) return false;
     return parts.every(function(part) {
-        if (!dlbPanelOnlyDigits(part)) return false;
+        if (!atlasOnlyDigits(part)) return false;
         if (part.length > 1 && part[0] === '0') return false;
         const n = Number(part);
         return n >= 0 && n <= 255;
     });
 }
 
-function dlbPanelIsIpv6(line) {
+function atlasIsIpv6(line) {
     if (line.indexOf(':') === -1) return false;
     for (let i = 0; i < line.length; i++) {
         const c = line[i].toLowerCase();
@@ -4472,7 +4472,7 @@ function dlbPanelIsIpv6(line) {
     return parts.every(function(part) { return part.length <= 4; });
 }
 
-function dlbPanelIsHostname(line) {
+function atlasIsHostname(line) {
     const normalized = line.endsWith('.') ? line.slice(0, -1) : line;
     if (!normalized || normalized.length > 253 || normalized.indexOf('.') === -1) return false;
     const labels = normalized.split('.');
@@ -4488,10 +4488,10 @@ function dlbPanelIsHostname(line) {
     });
 }
 
-function isDlbPanelValidIpLine(line) {
+function isAtlasValidIpLine(line) {
     line = String(line || '').trim();
     if (!line || line.length > 253) return false;
-    const invalidChars = ['<', '>', '{', '}', '[', ']', '"', "'", DLBPANEL_BS, '/', '?', '#', '&', '=', ',', ';'];
+    const invalidChars = ['<', '>', '{', '}', '[', ']', '"', "'", ATLAS_BS, '/', '?', '#', '&', '=', ',', ';'];
     for (let i = 0; i < invalidChars.length; i++) {
         if (line.indexOf(invalidChars[i]) !== -1) return false;
     }
@@ -4504,17 +4504,17 @@ function isDlbPanelValidIpLine(line) {
         if (lower.indexOf(badWords[i]) !== -1) return false;
     }
     if (line.indexOf('://') !== -1) return false;
-    return dlbPanelIsIpv4(line) || dlbPanelIsIpv6(line) || dlbPanelIsHostname(line);
+    return atlasIsIpv4(line) || atlasIsIpv6(line) || atlasIsHostname(line);
 }
 
-function cleanDlbPanelTextareaIps(value) {
+function cleanAtlasTextareaIps(value) {
     const seen = new Set();
     const out = [];
-    String(value || '').split(DLBPANEL_CR).join('').split(DLBPANEL_LF).forEach(function(raw) {
+    String(value || '').split(ATLAS_CR).join('').split(ATLAS_LF).forEach(function(raw) {
         raw.split(',').forEach(function(piece) {
             piece.split(';').forEach(function(part) {
                 const line = part.trim();
-                if (!isDlbPanelValidIpLine(line)) return;
+                if (!isAtlasValidIpLine(line)) return;
                 const key = line.toLowerCase();
                 if (seen.has(key)) return;
                 seen.add(key);
@@ -4522,17 +4522,17 @@ function cleanDlbPanelTextareaIps(value) {
             });
         });
     });
-    return out.join(DLBPANEL_LF);
+    return out.join(ATLAS_LF);
 }
 
-const DLBPANEL_IPS_CACHE_KEY = 'dlbpanel_daily_ips_cache_v3';
-const DLBPANEL_IPS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const ATLAS_IPS_CACHE_KEY = 'atlas_daily_ips_cache_v3';
+const ATLAS_IPS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
-function parseDlbPanelIpsText(text) {
-    if (isDlbPanelHtmlText(text)) throw new Error('GitHub returned HTML instead of ips.txt');
+function parseAtlasIpsText(text) {
+    if (isAtlasHtmlText(text)) throw new Error('GitHub returned HTML instead of ips.txt');
     const grouped = {};
     let opName = 'All';
-    const lines = String(text || '').split(DLBPANEL_CR).join('').split(DLBPANEL_LF).map(function(l) { return l.trim(); });
+    const lines = String(text || '').split(ATLAS_CR).join('').split(ATLAS_LF).map(function(l) { return l.trim(); });
     for (const line of lines) {
         if (!line) continue;
         if (line.startsWith('#')) {
@@ -4541,28 +4541,28 @@ function parseDlbPanelIpsText(text) {
             continue;
         }
         if (line.startsWith('----------') || line.startsWith('[source')) continue;
-        if (!isDlbPanelValidIpLine(line)) continue;
+        if (!isAtlasValidIpLine(line)) continue;
         if (!grouped[opName]) grouped[opName] = [];
         grouped[opName].push(line);
     }
     Object.keys(grouped).forEach(function(key) {
-        grouped[key] = Array.from(new Set(grouped[key])).filter(isDlbPanelValidIpLine);
+        grouped[key] = Array.from(new Set(grouped[key])).filter(isAtlasValidIpLine);
         if (grouped[key].length === 0) delete grouped[key];
     });
     if (Object.keys(grouped).length === 0) throw new Error('No valid IPs in ips.txt');
     return grouped;
 }
 
-function readDlbPanelIpsCache() {
+function readAtlasIpsCache() {
     try {
-        const raw = localStorage.getItem(DLBPANEL_IPS_CACHE_KEY);
+        const raw = localStorage.getItem(ATLAS_IPS_CACHE_KEY);
         if (!raw) return null;
         const cache = JSON.parse(raw);
         if (!cache || !cache.data || typeof cache.fetchedAt !== 'number') return null;
         const normalized = {};
         Object.keys(cache.data).forEach(function(key) {
             const ips = Array.isArray(cache.data[key]) ? cache.data[key] : [];
-            const cleanIps = Array.from(new Set(ips.map(String).map(function(x) { return x.trim(); }).filter(isDlbPanelValidIpLine)));
+            const cleanIps = Array.from(new Set(ips.map(String).map(function(x) { return x.trim(); }).filter(isAtlasValidIpLine)));
             if (cleanIps.length) normalized[key] = cleanIps;
         });
         if (Object.keys(normalized).length === 0) return null;
@@ -4572,21 +4572,21 @@ function readDlbPanelIpsCache() {
     }
 }
 
-function saveDlbPanelIpsCache(data) {
+function saveAtlasIpsCache(data) {
     try {
-        localStorage.setItem(DLBPANEL_IPS_CACHE_KEY, JSON.stringify({
+        localStorage.setItem(ATLAS_IPS_CACHE_KEY, JSON.stringify({
             fetchedAt: Date.now(),
-            source: DLBPANEL_IPS_GITHUB_BLOB_URL,
-            rawSource: DLBPANEL_IPS_GITHUB_RAW_URL,
+            source: ATLAS_IPS_GITHUB_BLOB_URL,
+            rawSource: ATLAS_IPS_GITHUB_RAW_URL,
             data
         }));
     } catch (e) {}
 }
 
-function useDlbPanelIpsData(data) {
+function useAtlasIpsData(data) {
     cachedIpsData = {};
     Object.keys(data || {}).forEach(function(key) {
-        const cleanIps = Array.from(new Set((data[key] || []).map(String).map(function(x) { return x.trim(); }).filter(isDlbPanelValidIpLine)));
+        const cleanIps = Array.from(new Set((data[key] || []).map(String).map(function(x) { return x.trim(); }).filter(isAtlasValidIpLine)));
         if (cleanIps.length) cachedIpsData[key] = cleanIps;
     });
     if (Object.keys(cachedIpsData).length === 0) throw new Error('No cached valid IPs');
@@ -4595,15 +4595,15 @@ function useDlbPanelIpsData(data) {
 
 async function fetchIpsList() {
     const ipBox = document.getElementById('input-ips');
-    if (ipBox && isDlbPanelHtmlText(ipBox.value)) ipBox.value = '';
-    const cache = readDlbPanelIpsCache();
-    const cacheIsFresh = cache && (Date.now() - cache.fetchedAt) < DLBPANEL_IPS_CACHE_TTL_MS;
+    if (ipBox && isAtlasHtmlText(ipBox.value)) ipBox.value = '';
+    const cache = readAtlasIpsCache();
+    const cacheIsFresh = cache && (Date.now() - cache.fetchedAt) < ATLAS_IPS_CACHE_TTL_MS;
     if (cacheIsFresh) {
-        useDlbPanelIpsData(cache.data);
+        useAtlasIpsData(cache.data);
         return;
     }
     try {
-        const response = await fetch(DLBPANEL_IPS_GITHUB_RAW_URL + '?t=' + Date.now(), {
+        const response = await fetch(ATLAS_IPS_GITHUB_RAW_URL + '?t=' + Date.now(), {
             cache: 'no-store',
             redirect: 'follow',
             headers: { 'Accept': 'text/plain, */*;q=0.1' }
@@ -4611,21 +4611,21 @@ async function fetchIpsList() {
         const contentType = response.headers.get('content-type') || '';
         const text = await response.text();
         if (!response.ok) throw new Error('GitHub fetch failed: ' + response.status);
-        if (contentType.toLowerCase().indexOf('text/html') !== -1 || isDlbPanelHtmlText(text)) {
+        if (contentType.toLowerCase().indexOf('text/html') !== -1 || isAtlasHtmlText(text)) {
             throw new Error('GitHub returned HTML instead of ips.txt');
         }
-        const parsed = parseDlbPanelIpsText(text);
+        const parsed = parseAtlasIpsText(text);
         const oldData = cache ? JSON.stringify(cache.data) : '';
         const newData = JSON.stringify(parsed);
-        if (oldData !== newData || !cache) saveDlbPanelIpsCache(parsed);
-        useDlbPanelIpsData(parsed);
+        if (oldData !== newData || !cache) saveAtlasIpsCache(parsed);
+        useAtlasIpsData(parsed);
     } catch (err) {
         if (cache && cache.data) {
-            useDlbPanelIpsData(cache.data);
+            useAtlasIpsData(cache.data);
             return;
         }
-        if (ipBox && isDlbPanelHtmlText(ipBox.value)) ipBox.value = '';
-        alert('دریافت IP از GitHub ناموفق بود و cache سالمی هم وجود ندارد. فقط این فایل باید خوانده شود:' + DLBPANEL_LF + DLBPANEL_IPS_GITHUB_BLOB_URL + DLBPANEL_LF + DLBPANEL_LF + 'خطا: ' + (err.message || err));
+        if (ipBox && isAtlasHtmlText(ipBox.value)) ipBox.value = '';
+        alert('دریافت IP از GitHub ناموفق بود و cache سالمی هم وجود ندارد. فقط این فایل باید خوانده شود:' + ATLAS_LF + ATLAS_IPS_GITHUB_BLOB_URL + ATLAS_LF + ATLAS_LF + 'خطا: ' + (err.message || err));
         toggleIpSelectorModal(false);
         throw err;
     }
@@ -4657,7 +4657,7 @@ function toggleIpSelectorModal(show) {
 }
 async function openIpSelectorModal() {
     const ipBox = document.getElementById('input-ips');
-    if (ipBox && isDlbPanelHtmlText(ipBox.value)) ipBox.value = '';
+    if (ipBox && isAtlasHtmlText(ipBox.value)) ipBox.value = '';
     toggleIpSelectorModal(true);
     document.getElementById('ip-loading-state').classList.remove('hidden');
     document.getElementById('ip-selection-form').classList.add('hidden');
@@ -4679,7 +4679,7 @@ function applySelectedIps() {
     } else {
         availableIps = cachedIpsData[operator] || [];
     }
-    availableIps = Array.from(new Set(availableIps)).filter(isDlbPanelValidIpLine);
+    availableIps = Array.from(new Set(availableIps)).filter(isAtlasValidIpLine);
     let selectedIps = [];
     if (count >= availableIps.length) {
         selectedIps = availableIps;
@@ -4693,7 +4693,7 @@ function applySelectedIps() {
         }
         selectedIps = shuffled.slice(0, count);
     }
-    document.getElementById('input-ips').value = selectedIps.join(DLBPANEL_LF);
+    document.getElementById('input-ips').value = selectedIps.join(ATLAS_LF);
     toggleIpSelectorModal(false);
 }
 document.addEventListener('DOMContentLoaded', () => {
@@ -4714,7 +4714,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (typeof checkForUpdates === 'function') Promise.resolve(checkForUpdates(false)).catch(err => console.error('checkForUpdates refresh failed:', err));
                 }, 60000);
             } catch (err) {
-                console.error('DLB Panel init failed:', err);
+                console.error('Atlas init failed:', err);
                 const versionBadge = document.getElementById('panel-version');
                 if (versionBadge) versionBadge.innerText = 'v' + CURRENT_VERSION + ' / init-error';
             }
@@ -4760,7 +4760,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="inline-block p-3.5 bg-blue-600/10 text-blue-500 rounded-3xl mb-3 border border-blue-500/20 shadow-lg shadow-blue-500/5">
                 <svg class="w-9 h-9" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
             </div>
-            <h1 class="text-xl font-bold tracking-tight text-gray-900 dark:text-white mb-1">پنل DLB - وضعیت اشتراک</h1>
+            <h1 class="text-xl font-bold tracking-tight text-gray-900 dark:text-white mb-1">پنل Atlas - وضعیت اشتراک</h1>
             <p id="display-username" class="text-sm font-bold text-blue-500 tracking-wide font-mono mb-2"></p>
             <div id="live-connections-badge" class="hidden inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 rounded-full text-xs font-bold shadow-sm">
                 <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -4873,30 +4873,30 @@ document.addEventListener('DOMContentLoaded', () => {
 </div>
 <div class="flex flex-col gap-4 mt-6 z-10">
     <div class="flex items-center gap-4 justify-center">
-        <a href="https://github.com/Alidl81/DLB-Panel" target="_blank" class="flex items-center gap-2 px-4 py-2 bg-white dark:bg-amoled-card border border-gray-200 dark:border-amoled-border rounded-full shadow-sm hover:shadow-md transition text-sm font-bold text-gray-700 dark:text-zinc-300 hover:text-black dark:hover:text-white group">
+        <a href="https://github.com/leonardo0231/Setad" target="_blank" class="flex items-center gap-2 px-4 py-2 bg-white dark:bg-amoled-card border border-gray-200 dark:border-amoled-border rounded-full shadow-sm hover:shadow-md transition text-sm font-bold text-gray-700 dark:text-zinc-300 hover:text-black dark:hover:text-white group">
             <svg class="w-5 h-5 group-hover:scale-110 transition" viewBox="0 0 24 24" fill="currentColor">
                 <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0012 2z"/>
             </svg>
             گیت‌هاب
         </a>
 
-        <a href="https://github.com/Alidl81/DLB-Panel" target="_blank" class="flex items-center gap-2 px-4 py-2 bg-white dark:bg-amoled-card border border-gray-200 dark:border-amoled-border rounded-full shadow-sm hover:shadow-md transition text-sm font-bold text-gray-700 dark:text-zinc-300 hover:text-sky-500 dark:hover:text-sky-400 group">
+        <a href="https://github.com/leonardo0231/Setad" target="_blank" class="flex items-center gap-2 px-4 py-2 bg-white dark:bg-amoled-card border border-gray-200 dark:border-amoled-border rounded-full shadow-sm hover:shadow-md transition text-sm font-bold text-gray-700 dark:text-zinc-300 hover:text-sky-500 dark:hover:text-sky-400 group">
             <svg class="w-5 h-5 text-sky-500 group-hover:scale-110 transition" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.94-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.37.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .24z"/>
             </svg>
-            DLBPanel
+            Atlas
         </a>
     </div>
 	
     <div class="flex items-center gap-4 justify-center">
-        <a href="https://github.com/Alidl81/DLB-Panel" target="_blank" class="flex items-center gap-2 px-4 py-2 bg-white dark:bg-amoled-card border border-gray-200 dark:border-amoled-border rounded-full shadow-sm hover:shadow-md transition text-sm font-bold text-amber-600 dark:text-amber-400 hover:text-amber-500 dark:hover:text-amber-300 group">
+        <a href="https://github.com/leonardo0231/Setad" target="_blank" class="flex items-center gap-2 px-4 py-2 bg-white dark:bg-amoled-card border border-gray-200 dark:border-amoled-border rounded-full shadow-sm hover:shadow-md transition text-sm font-bold text-amber-600 dark:text-amber-400 hover:text-amber-500 dark:hover:text-amber-300 group">
             <svg class="w-5 h-5 text-amber-500 dark:text-amber-400 group-hover:scale-110 transition" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
             </svg>
-            DLB Panel
+            Atlas
         </a>
 
-        <a href="https://github.com/Alidl81/DLB-Panel" target="_blank" class="flex items-center gap-2 px-4 py-2 bg-white dark:bg-amoled-card border border-gray-200 dark:border-amoled-border rounded-full shadow-sm hover:shadow-md transition text-sm font-bold text-red-600 dark:text-red-400 hover:text-red-500 dark:hover:text-red-300 group">
+        <a href="https://github.com/leonardo0231/Setad" target="_blank" class="flex items-center gap-2 px-4 py-2 bg-white dark:bg-amoled-card border border-gray-200 dark:border-amoled-border rounded-full shadow-sm hover:shadow-md transition text-sm font-bold text-red-600 dark:text-red-400 hover:text-red-500 dark:hover:text-red-300 group">
             <svg class="w-5 h-5 text-red-500 dark:text-red-400 group-hover:scale-110 transition" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3 9.24 3 10.91 3.81 12 5.08 13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
             </svg>
@@ -4909,7 +4909,7 @@ document.addEventListener('DOMContentLoaded', () => {
         function getHost() {
             return window.location.host;
         }
-        function isDlbPanelValidIpLine(line) {
+        function isAtlasValidIpLine(line) {
             line = String(line || '').trim();
             if (!line || line.length > 253) return false;
             if (/[<>{}\[\]"'\\]/.test(line)) return false;
@@ -4929,7 +4929,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const host = getHost();
             var ips = [host];
             if (u.ips) {
-                ips = u.ips.split('\\n').map(function(ip) { return ip.trim(); }).filter(isDlbPanelValidIpLine);
+                ips = u.ips.split('\\n').map(function(ip) { return ip.trim(); }).filter(isAtlasValidIpLine);
                 if (ips.length === 0) ips = [host];
             }
             var ports = String(u.port || '443').split(',').map(function(p) { return p.trim(); }).filter(function(p) { return p.length > 0; });

@@ -1,24 +1,24 @@
 <p align="center">
-  <img src="photos/dlbpanel-dark.png" width="100%" alt="DLB Panel" style="border-radius: 12px; margin-bottom: 15px;">
+  <img src="photos/atlas-dark.png" width="100%" alt="Atlas" style="border-radius: 12px; margin-bottom: 15px;">
 </p>
 
 <table width="100%">
   <tr>
-    <td width="50%" valign="middle" align="center"><img src="photos/dlbpanel-updater.png" width="100%" alt="DLB Panel Updater" style="border-radius: 12px;"></td>
-    <td width="50%" valign="middle" align="center"><img src="photos/dlbpanel-deployer.png" width="100%" alt="DLB Panel Deployer" style="border-radius: 12px;"></td>
+    <td width="50%" valign="middle" align="center"><img src="photos/atlas-updater.png" width="100%" alt="Atlas Updater" style="border-radius: 12px;"></td>
+    <td width="50%" valign="middle" align="center"><img src="photos/atlas-deployer.png" width="100%" alt="Atlas Deployer" style="border-radius: 12px;"></td>
   </tr>
   <tr>
-    <td width="50%" valign="middle" align="center"><img src="photos/dlbpanel-add.png" width="100%" alt="DLB Panel Add User" style="border-radius: 12px;"></td>
-    <td width="50%" valign="middle" align="center"><img src="photos/dlbpanel-status.png" width="100%" alt="DLB Panel Status" style="border-radius: 12px;"></td>
+    <td width="50%" valign="middle" align="center"><img src="photos/atlas-add.png" width="100%" alt="Atlas Add User" style="border-radius: 12px;"></td>
+    <td width="50%" valign="middle" align="center"><img src="photos/atlas-status.png" width="100%" alt="Atlas Status" style="border-radius: 12px;"></td>
   </tr>
 </table>
 
 <div align="center">
-  <h1>⚡ DLB Panel for Cloudflare Workers</h1>
+  <h1>⚡ Atlas for Cloudflare Workers</h1>
   <p>
-    <img src="https://img.shields.io/badge/Project-DLBPanel-0052CC?style=for-the-badge" alt="DLBPanel">
+    <img src="https://img.shields.io/badge/Project-Atlas-0052CC?style=for-the-badge" alt="Atlas">
     <img src="https://img.shields.io/badge/Platform-Cloudflare_Workers-F38020?style=for-the-badge&logo=cloudflare&logoColor=white" alt="Cloudflare Workers">
-    <img src="https://img.shields.io/badge/Main-dlbpanel.js-222222?style=for-the-badge" alt="dlbpanel.js">
+    <img src="https://img.shields.io/badge/Main-atlaspanel.js-222222?style=for-the-badge" alt="atlaspanel.js">
   </p>
 </div>
 
@@ -26,7 +26,7 @@
 
 ## معرفی
 
-این ریپو برای دیپلوی خودکار **DLB Panel** روی Cloudflare Workers آماده شده است. فایل‌های اصلی پروژه با نام `dlbpanel` ساخته شده‌اند و فایل فعلی Worker در `dlbpanel.js` قرار دارد.
+این ریپو برای دیپلوی خودکار **Atlas** روی Cloudflare Workers آماده شده است. فایل‌های اصلی پروژه با نام `atlas` ساخته شده‌اند و فایل فعلی Worker در `atlaspanel.js` قرار دارد.
 
 منبع آپدیت Clean IP دقیقاً طبق درخواست، فقط از این مسیر خوانده می‌شود:
 
@@ -38,11 +38,11 @@ https://github.com/IR-NETLIFY/zeus/blob/main/ips.txt
 
 | فایل | کاربرد |
 |---|---|
-| `dlbpanel.js` | Worker اصلی پنل |
-| `dlbpanel-deployer.js` | Deployer اختیاری برای ساخت Worker و D1 از طریق توکن Cloudflare |
+| `atlaspanel.js` | Worker اصلی پنل |
+| `atlaspanel-deployer.js` | Deployer اختیاری برای ساخت Worker و D1 از طریق توکن Cloudflare |
 | `wrangler.toml` | تنظیمات Cloudflare Worker برای دیپلوی Git/CLI |
 | `package.json` | اسکریپت‌های ساده برای deploy/dev/check |
-| `photos/dlbpanel-*.png` | تصاویر مستندات با نام DLB Panel |
+| `photos/atlas-*.png` | تصاویر مستندات با نام Atlas |
 
 ## تنظیمات Cloudflare
 
@@ -60,7 +60,7 @@ npm run deploy
 یا اگر Cloudflare به GitHub وصل است، کافی است محتوای این پروژه را در شاخه `main` ریپوی زیر قرار دهید و Push کنید:
 
 ```txt
-https://github.com/Alidl81/DLB-Panel
+https://github.com/leonardo0231/Setad
 ```
 
 
@@ -80,7 +80,7 @@ https://github.com/Alidl81/DLB-Panel
 آپدیت سورس پنل از ریپوی خودتان انجام می‌شود:
 
 ```txt
-https://raw.githubusercontent.com/Alidl81/DLB-Panel/refs/heads/main/dlbpanel.js
+https://raw.githubusercontent.com/leonardo0231/Setad/refs/heads/main/atlaspanel.js
 ```
 
 اما آپدیت IPها فقط از لینک blob مشخص‌شده‌ی IR-NETLIFY انجام می‌شود و هیچ فایل/مسیر دیگری برای IPها استفاده نمی‌شود.

@@ -1,7 +1,7 @@
-# DLB Panel Cloudflare Notes
+# Atlas Cloudflare Notes
 
-- Main Worker file: `dlbpanel.js`
-- Optional deployer Worker file: `dlbpanel-deployer.js`
+- Main Worker file: `atlaspanel.js`
+- Optional deployer Worker file: `atlaspanel-deployer.js`
 - Required runtime binding: `DB` as Cloudflare D1
 - Optional secrets for in-panel updater: `CF_API_TOKEN`, `CF_ACCOUNT_ID`
 - Clean IP update source: `https://github.com/IR-NETLIFY/zeus/blob/main/ips.txt`
