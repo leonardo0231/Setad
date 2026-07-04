@@ -13,12 +13,6 @@
 
 این ریپو برای دیپلوی خودکار **Atlas** روی Cloudflare Workers آماده شده است. فایل‌های اصلی پروژه با نام `atlas` ساخته شده‌اند و فایل فعلی Worker در `atlaspanel.js` قرار دارد.
 
-منبع آپدیت Clean IP دقیقاً طبق درخواست، فقط از این مسیر خوانده می‌شود:
-
-```txt
-https://github.com/IR-NETLIFY/zeus/blob/main/ips.txt
-```
-
 ## فایل‌های مهم
 
 | فایل | کاربرد |
