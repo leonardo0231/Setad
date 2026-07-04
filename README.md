@@ -1,6 +1,3 @@
-<p align="center">
-  <img src="photos/atlas-dark.png" width="100%" alt="Atlas" style="border-radius: 12px; margin-bottom: 15px;">
-</p>
 
 <table width="100%">
   <tr>
